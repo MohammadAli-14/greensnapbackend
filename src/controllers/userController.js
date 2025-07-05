@@ -5,7 +5,12 @@ import { sendEmail } from "../utils/sendEmail.js";
 import { sendToken } from "../utils/sendToken.js";
 import { generateResetOTPTemplate } from '../utils/emailTemplates.js';
 import crypto from "crypto";
-import { validateEmail } from "../utils/validators.js";
+import { 
+  validateEmail,
+  PROVIDER_RULES,
+  verifyEmailDomain,
+  isEducationalEmail
+} from "../utils/validators.js";
 
 export const register = catchAsyncError(async (req, res, next) => {
   try {
@@ -16,10 +21,27 @@ export const register = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("All fields are required.", 400));
     }
 
-    // Validate email format
+    // Validate email format with provider-specific rules
     if (!validateEmail(email)) {
+      const domain = email.split('@')[1]?.toLowerCase();
+      
+      // Check if it's a known provider with specific rules
+      if (domain && PROVIDER_RULES[domain]) {
+        return next(new ErrorHandler(`Invalid ${domain} address format`, 400));
+      }
+      
       return next(new ErrorHandler("Invalid email address format", 400));
     }
+
+    // Verify domain existence through DNS
+    const domainValid = await verifyEmailDomain(email);
+    if (!domainValid) {
+      return next(new ErrorHandler("Email domain doesn't exist", 400));
+    }
+
+    // Check for educational email (for future use)
+    const isEducational = isEducationalEmail(email);
+    console.log(`Educational email detected: ${isEducational} - ${email}`);
 
     // Check for existing verified user
     const existingUser = await User.findOne({ 
