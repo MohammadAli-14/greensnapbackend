@@ -3,9 +3,9 @@ import { catchAsyncError } from "../middleware/catchAsyncError.js";
 import User from "../models/User.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { sendToken } from "../utils/sendToken.js";
-import { generateResetOTPTemplate } from '../utils/emailTemplates.js'; // New template function
+import { generateResetOTPTemplate } from '../utils/emailTemplates.js';
 import crypto from "crypto";
-
+import { validateEmail } from "../utils/validators.js";
 
 export const register = catchAsyncError(async (req, res, next) => {
   try {
@@ -14,6 +14,11 @@ export const register = catchAsyncError(async (req, res, next) => {
     // Validate required fields
     if (!username || !email || !password) {
       return next(new ErrorHandler("All fields are required.", 400));
+    }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      return next(new ErrorHandler("Invalid email address format", 400));
     }
 
     // Check for existing verified user
@@ -55,14 +60,14 @@ export const register = catchAsyncError(async (req, res, next) => {
     sendVerificationEmail(verificationCode, username, email, res);
     
   } catch (error) {
-    console.error("Registration Error:", error); // Enhanced error logging
+    console.error("Registration Error:", error);
     next(error);
   }
 });
 
 async function sendVerificationEmail(verificationCode, username, email, res) {
   try {
-    const message = generateEmailTemplate(verificationCode, username); // Fixed parameter
+    const message = generateEmailTemplate(verificationCode, username);
     await sendEmail({ 
       email, 
       subject: "Your Verification Code", 
@@ -239,7 +244,7 @@ export const verifyOTP = catchAsyncError(async (req, res, next) => {
     });
 
   } catch (error) {
-    console.error("OTP Verification Error:", error); // Enhanced error logging
+    console.error("OTP Verification Error:", error);
     next(new ErrorHandler("Internal Server Error", 500));
   }
 });
@@ -249,9 +254,9 @@ export const resendOTP = catchAsyncError(async (req, res, next) => {
   const MAX_RESEND_ATTEMPTS = 3;
   const COOLDOWN_HOURS = 24;
 
-  // Validate email format
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
-    return next(new ErrorHandler("Invalid email address", 400));
+  // Validate email format using validator
+  if (!email || !validateEmail(email)) {
+    return next(new ErrorHandler("Invalid email address format", 400));
   }
 
   // Find unverified user
@@ -264,7 +269,7 @@ export const resendOTP = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("No pending verification found for this email", 404));
   }
 
-  // NEW: Combined check for max attempts AND active cooldown
+  // Combined check for max attempts AND active cooldown
   if (user.resendCount >= MAX_RESEND_ATTEMPTS && user.cooldownExpires && user.cooldownExpires > Date.now()) {
     const hoursLeft = Math.ceil((user.cooldownExpires - Date.now()) / (3600 * 1000));
     return next(new ErrorHandler(
@@ -335,6 +340,11 @@ export const login = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Email and password are required.", 400));
   }
   
+  // Validate email format
+  if (!validateEmail(email)) {
+    return next(new ErrorHandler("Invalid email address format", 400));
+  }
+  
   // Find user
   const user = await User.findOne({ 
     email, 
@@ -362,8 +372,8 @@ export const logout = catchAsyncError(async (req, res, next) => {
     .cookie("token", "", {
       expires: new Date(Date.now()),
       httpOnly: true,
-      sameSite: "none", // Added for cross-site cookies
-      secure: true      // Added for HTTPS only
+      sameSite: "none",
+      secure: true
     })
     .json({
       success: true,
@@ -392,8 +402,15 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
   const MAX_RESEND_ATTEMPTS = 3;
   const COOLDOWN_HOURS = 24;
   
+  const { email } = req.body;
+  
+  // Validate email format
+  if (!email || !validateEmail(email)) {
+    return next(new ErrorHandler("Invalid email address format", 400));
+  }
+  
   const user = await User.findOne({
-    email: req.body.email,
+    email,
     accountVerified: true,
   });
   
@@ -473,6 +490,11 @@ export const verifyResetOTP = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Email and OTP are required.", 400));
   }
 
+  // Validate email format
+  if (!validateEmail(email)) {
+    return next(new ErrorHandler("Invalid email address format", 400));
+  }
+
   // Find user by email
   const user = await User.findOne({ email, accountVerified: true });
   
@@ -485,7 +507,7 @@ export const verifyResetOTP = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Invalid OTP code", 400));
   }
 
-  // Check expiration - using clean, user-friendly error message
+  // Check expiration
   if (user.resetPasswordOTPExpire <= Date.now()) {
     return next(new ErrorHandler("OTP has expired. Please request a new one.", 400));
   }
@@ -513,6 +535,11 @@ export const resetPasswordWithOTP = catchAsyncError(async (req, res, next) => {
     if (!email || !password) {
       console.error("Reset password missing fields:", req.body);
       return next(new ErrorHandler("Email and password are required.", 400));
+    }
+
+    // Validate email format
+    if (!validateEmail(email)) {
+      return next(new ErrorHandler("Invalid email address format", 400));
     }
 
     const user = await User.findOne({ email, accountVerified: true });
