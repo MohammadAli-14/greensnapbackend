@@ -52,11 +52,10 @@ export const suggestEmailCorrection = (email) => {
   
   const [localPart, domain] = email.toLowerCase().split('@');
   
-  // 1. Fix common domain typos
+  // Only fix common domain typos - don't change local part
   const domainCorrections = {
     'gmai.com': 'gmail.com',
     'gmaill.com': 'gmail.com',
-    'gmai.com': 'gmail.com',
     'gmal.com': 'gmail.com',
     'gmial.com': 'gmail.com',
     'gmail.con': 'gmail.com',
@@ -71,29 +70,13 @@ export const suggestEmailCorrection = (email) => {
     'hotmail.co': 'hotmail.com',
     'outlok.com': 'outlook.com',
     'outlook.con': 'outlook.com',
-    'outlook.co': 'outlook.com',
     'icloud.con': 'icloud.com',
     'protonmail.con': 'protonmail.com'
   };
 
-  // Apply domain correction if needed
-  const correctedDomain = domainCorrections[domain] || domain;
-
-  // 2. Add missing .com if needed
-  if (!correctedDomain.includes('.') && correctedDomain.length > 3) {
-    return `${localPart}@${correctedDomain}.com`;
-  }
-
-  // 3. Fix doubled extensions (e.g., .com.com)
-  const domainParts = correctedDomain.split('.');
-  if (domainParts.length > 2 && 
-      domainParts[domainParts.length - 1] === domainParts[domainParts.length - 2]) {
-    return `${localPart}@${domainParts.slice(0, -1).join('.')}`;
-  }
-
-  // 4. Return corrected domain if it changed
-  if (correctedDomain !== domain) {
-    return `${localPart}@${correctedDomain}`;
+  // Only correct if we have a known typo
+  if (domainCorrections[domain]) {
+    return `${localPart}@${domainCorrections[domain]}`;
   }
 
   return null;
